@@ -30,7 +30,10 @@ class WorldModelND:
         along each direction.
         """
 
-        self._grid_max = np.array(shape)
+        if (np.array(shape) <= 0).any():
+            raise ValueError("Invalid world shape %s", shape)
+
+        self._grid_max = np.array(shape) - 1
         """Maximum coordinates of the grid in every dimension."""
 
         self._dimension = len(shape)
@@ -43,6 +46,13 @@ class WorldModelND:
             self._grid = np.zeros(shape)
         else:
             self._grid = grid
+
+    @property
+    def shape(self):
+        """
+        Return the shape of the world (number of entries in each dimension).
+        """
+        return self._grid.shape
 
     @property
     def gmax(self):
@@ -154,9 +164,7 @@ class WorldModelND:
         q = self._normalize_point_input(q)
         self._check_rect_ordering(p, q)
         q = q + 1
-        if (self._grid.shape < q).any():
-            return
-        logger.debug("World replace %s %s", p, q)
+        logger.debug("World replace %s %s grid:%s", p, q, grid.shape)
         coords = np.meshgrid(*starmap(np.arange, zip(p, q)), indexing="ij")
         self._grid[coords] = grid
 

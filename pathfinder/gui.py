@@ -50,7 +50,7 @@ class Window(QMainWindow):
         """
         super().__init__()
 
-        self.world_mgr = QtWorldManager(WorldModelND((0, 0)))
+        self.world_mgr = QtWorldManager(WorldModelND((1, 1)))
 
         self.setWindowTitle("Pathfinder test")
         self.resize(1024, 768)
@@ -80,11 +80,14 @@ class Window(QMainWindow):
         # build bar subwidgets
         self.gui_selector = GuiSelector()
         self.selector = Selector()
-        bar_layout.addWidget(self.gui_selector)
+        self.build_selector = BuildSelector()
+        bar_layout.addWidget(self.build_selector)
         bar_layout.addWidget(self.selector)
+        bar_layout.addWidget(self.gui_selector)
+
 
         self.selector.grid_shape_selected.connect(self.world_mgr.model_update)
-        self.selector.material_selected.connect(self.world_mgr.select_material)
+        self.build_selector.material_selected.connect(self.world_mgr.select_material)
         self.gui_selector.view_type_selected.connect(self.grid.view_type_changed)
         self.world_mgr.model_changed.connect(self.grid.model_changed)
         self.world_mgr.model_shape_changed.connect(
@@ -94,8 +97,6 @@ class Window(QMainWindow):
         # initialize everything with defaults
         self.gui_selector.reset_default()
         self.selector.reset_default()
-
-
 
 
 class GuiSelector(QWidget):
@@ -166,9 +167,6 @@ class Selector(QWidget):
     grid_shape_selected = pyqtSignal(tuple)
     """Signal emitted when the user resizes the grid."""
 
-    material_selected = pyqtSignal(Material)
-    """Signal emitted when the user selects a material to use."""
-
     def __init__(self):
         """
         Selector widget constructor.
@@ -177,7 +175,7 @@ class Selector(QWidget):
         """
         super().__init__()
 
-        self.layout = QVBoxLayout(self)
+        layout = QVBoxLayout(self)
 
         box = QGroupBox("Grid Settings", self)
         box_layout = QVBoxLayout(box)
@@ -186,35 +184,19 @@ class Selector(QWidget):
         self.in_grid_w.setRange(1, 100000)
         self.in_grid_h = QSpinBox()
         self.in_grid_h.setRange(1, 100000)
-        self.tgl_start = QPushButton("Start")
-        self.tgl_start.setCheckable(True)
-        self.tgl_end = QPushButton("Target")
-        self.tgl_end.setCheckable(True)
-        self.tgl_wall = QPushButton("Wall")
-        self.tgl_wall.setCheckable(True)
-        self.tgl_clear = QPushButton("Clear")
-        self.tgl_clear.setCheckable(True)
         lb_grid_w = QLabel("Grid width:")
         lb_grid_h = QLabel("Grid height:")
         btn_apply_settings = QPushButton("Apply")
         # append widgets
         btn_apply_settings.clicked.connect(self._apply_settings)
-        self.tgl_start.toggled.connect(self._start_toggle)
-        self.tgl_end.toggled.connect(self._end_toggle)
-        self.tgl_wall.toggled.connect(self._wall_toggle)
-        self.tgl_clear.toggled.connect(self._clear_toggle)
         box_layout.addWidget(lb_grid_w)
         box_layout.addWidget(self.in_grid_w)
         box_layout.addWidget(lb_grid_h)
         box_layout.addWidget(self.in_grid_h)
-        box_layout.addWidget(self.tgl_start)
-        box_layout.addWidget(self.tgl_end)
-        box_layout.addWidget(self.tgl_wall)
-        box_layout.addWidget(self.tgl_clear)
         box_layout.addSpacing(10)
         box_layout.addWidget(btn_apply_settings)
 
-        self.layout.addWidget(box)
+        layout.addWidget(box)
 
     def reset_default(self):
         """Reset the widget to the default state."""
@@ -233,6 +215,41 @@ class Selector(QWidget):
             self.in_grid_h.value()
         )
         self.grid_shape_selected.emit(new_shape)
+
+
+class BuildSelector(QWidget):
+    """
+    Widget that handles the building of objects in the world.
+    """
+
+    material_selected = pyqtSignal(Material)
+    """Signal emitted when the user selects a material to use."""
+
+    def __init__(self):
+        """Initialize subwidgets and connect signals."""
+        super().__init__()
+
+        layout = QVBoxLayout(self)
+        box = QGroupBox("Build tools", self)
+        box_layout = QVBoxLayout(box)
+        self.tgl_start = QPushButton("Start")
+        self.tgl_start.setCheckable(True)
+        self.tgl_end = QPushButton("Target")
+        self.tgl_end.setCheckable(True)
+        self.tgl_wall = QPushButton("Wall")
+        self.tgl_wall.setCheckable(True)
+        self.tgl_clear = QPushButton("Clear")
+        self.tgl_clear.setCheckable(True)
+        # append widgets
+        self.tgl_start.toggled.connect(self._start_toggle)
+        self.tgl_end.toggled.connect(self._end_toggle)
+        self.tgl_wall.toggled.connect(self._wall_toggle)
+        self.tgl_clear.toggled.connect(self._clear_toggle)
+        box_layout.addWidget(self.tgl_start)
+        box_layout.addWidget(self.tgl_end)
+        box_layout.addWidget(self.tgl_wall)
+        box_layout.addWidget(self.tgl_clear)
+        layout.addWidget(box)
 
     def _start_toggle(self, checked):
         """

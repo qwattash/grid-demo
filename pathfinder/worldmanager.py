@@ -39,12 +39,14 @@ class WorldManager:
         :param new_shape: new world shape tuple
         :return: True if the world was replaced
         """
+        logger.debug("WorldManager: new world shape %s", new_shape)
         if (new_shape != self.size).any():
             new_world = WorldModelND(new_shape)
-            min_shape = np.minimum(self.size, new_shape)
-            zero = np.zeros(len(min_shape))
-            common = self.world.query(zero, min_shape)
-            if (common.shape != zero).all():
+            min_shape = np.minimum(self.world.shape, new_shape) - 1
+            if (min_shape != 0).all():
+                # there is some common block to replace
+                zero = np.zeros(len(min_shape))
+                common = self.world.query(zero, min_shape)
                 new_world.replace(zero, min_shape, common)
             self.world = new_world
             return True
