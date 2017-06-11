@@ -39,18 +39,25 @@ class WorldManager:
         :param new_shape: new world shape tuple
         :return: True if the world was replaced
         """
+        new_shape = np.array(new_shape)
         logger.debug("WorldManager: new world shape %s", new_shape)
-        if (new_shape != self.size).any():
-            new_world = WorldModelND(new_shape)
-            min_shape = np.minimum(self.world.shape, new_shape) - 1
-            if (min_shape != 0).all():
-                # there is some common block to replace
-                zero = np.zeros(len(min_shape))
-                common = self.world.query(zero, min_shape)
-                new_world.replace(zero, min_shape, common)
-            self.world = new_world
-            return True
-        return False
+        if len(new_shape) == self.world.dimension:
+            # only changed size of the grid
+            if (new_shape != self.size).any():
+                new_world = WorldModelND(new_shape)
+                min_shape = np.minimum(self.world.shape, new_shape) - 1
+                if (min_shape != 0).all():
+                    # there is some common block to replace
+                    zero = np.zeros(len(min_shape))
+                    common = self.world.query(zero, min_shape)
+                    new_world.replace(zero, min_shape, common)
+                self.world = new_world
+            else:
+                # nothing to do
+                return False
+        else:
+            self.world = WorldModelND(new_shape)
+        return True
 
     def set_material(self, material):
         """
@@ -92,8 +99,7 @@ class QtWorldManager(WorldManager, QObject):
         :param shape: n-tuple containing the maximum size
         along each dimension.
         """
-        if (shape != self.size).any():
-            self.resize(shape)
+        self.resize(shape)
 
     @pyqtSlot(Material)
     def select_material(self, material):

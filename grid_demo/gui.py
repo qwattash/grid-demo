@@ -12,7 +12,7 @@ import numpy as np
 
 from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QSizePolicy, QGridLayout
-from PyQt5.QtWidgets import QGroupBox
+from PyQt5.QtWidgets import QGroupBox, QScrollArea
 from PyQt5.QtWidgets import QPushButton, QLabel, QSpinBox, QRadioButton
 from PyQt5.QtGui import QPainter, QBrush, QColor, QPen, QTransform
 from PyQt5.QtCore import QRect, QLineF
@@ -184,30 +184,54 @@ class Selector(QWidget):
 
         box = QGroupBox("Grid Settings", self)
         box_layout = QVBoxLayout(box)
+        layout.addWidget(box)
+
         # width and height of grid and labels
-        self.in_grid_w = QSpinBox()
-        self.in_grid_w.setRange(1, 100000)
-        self.in_grid_h = QSpinBox()
-        self.in_grid_h.setRange(1, 100000)
-        lb_grid_w = QLabel("Grid width:")
-        lb_grid_h = QLabel("Grid height:")
+        lb_num_dimensions = QLabel("Number of dimensions:")
+        self.in_num_dimensions = QSpinBox()
+        self.in_num_dimensions.setRange(2, 100)
+        box_layout.addWidget(lb_num_dimensions)
+        box_layout.addWidget(self.in_num_dimensions)
+        self.in_num_dimensions.valueChanged.connect(self._update_dimensions)
+
+        self.dimension_spinbox = []
+        self.dimension_list = QWidget()
+        self.dimension_list.setLayout(QVBoxLayout())
+        scroll = QScrollArea()
+        scroll.setWidget(self.dimension_list)
+        box_layout.addWidget(self.dimension_list)
+
         btn_apply_settings = QPushButton("Apply")
-        # append widgets
         btn_apply_settings.clicked.connect(self._apply_settings)
-        box_layout.addWidget(lb_grid_w)
-        box_layout.addWidget(self.in_grid_w)
-        box_layout.addWidget(lb_grid_h)
-        box_layout.addWidget(self.in_grid_h)
         box_layout.addSpacing(10)
         box_layout.addWidget(btn_apply_settings)
 
-        layout.addWidget(box)
-
     def reset_default(self):
         """Reset the widget to the default state."""
-        self.in_grid_w.setValue(10)
-        self.in_grid_h.setValue(10)
+        self._update_dimensions(2)
+        self.dimension_spinbox[0].setValue(10)
+        self.dimension_spinbox[1].setValue(10)
         self.grid_shape_selected.emit((10, 10))
+
+    @pyqtSlot(int)
+    def _update_dimensions(self, value):
+        """
+        Qt slot for updates on the dimension number input box.
+
+        This adds or remove spinners from the dimension listbox.
+        """
+        curr_dims = len(self.dimension_spinbox)
+        if curr_dims > value:
+            extra = self.dimension_spinbox[value:]
+            for spinbox in extra:
+                spinbox.deleteLater()
+        elif curr_dims < value:
+            layout = self.dimension_list.layout()
+            for _ in range(value - curr_dims):
+                spinbox = QSpinBox()
+                spinbox.setRange(2, 10000000)
+                layout.addWidget(spinbox)
+                self.dimension_spinbox.append(spinbox)
 
     def _apply_settings(self, event): # pylint: disable=unused-argument
         """
@@ -215,11 +239,8 @@ class Selector(QWidget):
 
         Trigger the grid_update signal.
         """
-        new_shape = (
-            self.in_grid_w.value(),
-            self.in_grid_h.value()
-        )
-        self.grid_shape_selected.emit(new_shape)
+        new_shape = (spinbox.value() for spinbox in self.dimension_spinbox)
+        self.grid_shape_selected.emit(tuple(new_shape))
 
 
 class BuildSelector(QWidget):
@@ -361,11 +382,11 @@ class Grid2DViewBuilder(ViewBuilder):
 
         layout = view.layout()
 
-        self.g2d_display = Grid2DDisplay(self)
-        layout.addWidget(self.g2d_display, 0, 0)
+        self.xy_display = Grid2DDisplay(self)
+        layout.addWidget(self.xy_display, 0, 0)
 
     def destroy(self):
-        self.g2d_display.deleteLater()
+        self.xy_display.deleteLater()
         super().destroy()
 
     def redraw(self, manager):
@@ -375,14 +396,16 @@ class Grid2DViewBuilder(ViewBuilder):
         """
         super().redraw(manager)
         assert manager.world.dimension >= 2, "Too few dimensions in the world"
-        zero = np.zeros(manager.world.dimension)
-        slice_end = np.zeros(manager.world.dimension)
-        slice_end[0:2] = manager.world.gmax[0:2]
-        self.g2d_display.set_world(manager.world.query(zero, slice_end))
-        self.g2d_display.redraw()
+        world_grid = manager.world.all()
+
+        # axis indices
+        ax0, ax1 = manager.world.axes_index(0, 1)
+        xy_plane = Project2D(ax0, ax1)
+        self.xy_display.set_world(xy_plane.projection(world_grid))
+        self.xy_display.redraw()
 
 
-class Grid3DOrthogonalViewBuilder(ViewBuilder):
+class Grid3DOrthogonalViewBuilder(Grid2DViewBuilder):
     """
     Show three 2-d grid viewports on the world in the grid view.
 
@@ -396,27 +419,22 @@ class Grid3DOrthogonalViewBuilder(ViewBuilder):
 
         layout = view.layout()
 
-        self.xy_display = Grid2DDisplay(self)
         self.yz_display = Grid2DDisplay(self)
         self.xz_display = Grid2DDisplay(self)
-        layout.addWidget(self.xy_display, 0, 0)
         layout.addWidget(self.yz_display, 0, 1)
         layout.addWidget(self.xz_display, 1, 0)
 
     def destroy(self):
-        self.xy_display.deleteLater()
         self.yz_display.deleteLater()
         self.xz_display.deleteLater()
         super().destroy()
 
     def redraw(self, manager):
         super().redraw(manager)
-        assert manager.world.dimension >= 2, "Too few dimensions in the world"
         world_grid = manager.world.all()
 
         # axis indices
         ax0, ax1, ax2 = manager.world.axes_index(0, 1, 2)
-        xy_plane = Project2D(ax0, ax1)
         if manager.world.dimension >= 3:
             yz_plane = Project2D(ax1, ax2)
             xz_plane = Project2D(ax0, ax2)
@@ -424,17 +442,18 @@ class Grid3DOrthogonalViewBuilder(ViewBuilder):
             yz_plane = Project2D(ax1, ax1)
             xz_plane = Project2D(ax0, ax0)
 
-        self.xy_display.set_world(xy_plane.projection(world_grid))
         self.yz_display.set_world(yz_plane.projection(world_grid))
         self.xz_display.set_world(xz_plane.projection(world_grid))
-        self.xy_display.redraw()
         self.yz_display.redraw()
         self.xz_display.redraw()
 
 
 class Grid2DDisplay(QWidget):
     """
-    Simple 2-d grid display with click event handlers
+    Simple 2-d grid display with click event handlers.
+
+    Note that this assumes that the world (or subworld)
+    that is given to draw have strictly 2 dimensions.
     """
 
     def __init__(self, builder):
@@ -490,8 +509,8 @@ class Grid2DDisplay(QWidget):
     def _draw_grid(self, painter):
         """Draw the grid lines."""
         max_x, max_y = self.current_world.shape
-        x_ticks = np.arange(0, self.current_world.shape[0])
-        y_ticks = np.arange(0, self.current_world.shape[1])
+        x_ticks = np.arange(0, max_x)
+        y_ticks = np.arange(0, max_y)
         x_segs = zip(x_ticks, repeat(0), x_ticks, repeat(max_y))
         y_segs = zip(repeat(0), y_ticks, repeat(max_x), y_ticks)
         grid_lines = chain(starmap(QLineF, x_segs), starmap(QLineF, y_segs))
