@@ -5,3 +5,4 @@
 # python virtualenv and temp files
 venv
 __pycache__
+*.egg-info

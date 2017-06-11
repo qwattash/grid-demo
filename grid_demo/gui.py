@@ -18,8 +18,9 @@ from PyQt5.QtGui import QPainter, QBrush, QColor, QPen, QTransform
 from PyQt5.QtCore import QRect, QLineF
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 
-from pathfinder.world import WorldModelND, Material
-from pathfinder.worldmanager import QtWorldManager, WorldManager
+from grid_demo.world import WorldModelND, Material
+from grid_demo.worldmanager import QtWorldManager, WorldManager
+from grid_demo.projection import Project2D
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +88,12 @@ class Window(QMainWindow):
 
 
         self.selector.grid_shape_selected.connect(self.world_mgr.model_update)
-        self.build_selector.material_selected.connect(self.world_mgr.select_material)
-        self.gui_selector.view_type_selected.connect(self.grid.view_type_changed)
+        self.build_selector.material_selected.connect(
+            self.world_mgr.select_material)
+        self.gui_selector.view_type_selected.connect(
+            self.grid.view_type_changed)
+        self.gui_selector.view_type_selected.connect(
+            self.world_mgr.broadcast_world)
         self.world_mgr.model_changed.connect(self.grid.model_changed)
         self.world_mgr.model_shape_changed.connect(
             self.grid.model_shape_changed)
@@ -360,8 +365,7 @@ class Grid2DViewBuilder(ViewBuilder):
         layout.addWidget(self.g2d_display, 0, 0)
 
     def destroy(self):
-        layout = self._view.layout()
-        layout.removeWidget(self.g2d_display)
+        self.g2d_display.deleteLater()
         super().destroy()
 
     def redraw(self, manager):
@@ -376,6 +380,56 @@ class Grid2DViewBuilder(ViewBuilder):
         slice_end[0:2] = manager.world.gmax[0:2]
         self.g2d_display.set_world(manager.world.query(zero, slice_end))
         self.g2d_display.redraw()
+
+
+class Grid3DOrthogonalViewBuilder(ViewBuilder):
+    """
+    Show three 2-d grid viewports on the world in the grid view.
+
+    Each subgrid shows a projection on a pair of axes.
+    """
+
+    vtype = ViewType.MULTIGRID_3D
+
+    def __init__(self, view):
+        super().__init__(view)
+
+        layout = view.layout()
+
+        self.xy_display = Grid2DDisplay(self)
+        self.yz_display = Grid2DDisplay(self)
+        self.xz_display = Grid2DDisplay(self)
+        layout.addWidget(self.xy_display, 0, 0)
+        layout.addWidget(self.yz_display, 0, 1)
+        layout.addWidget(self.xz_display, 1, 0)
+
+    def destroy(self):
+        self.xy_display.deleteLater()
+        self.yz_display.deleteLater()
+        self.xz_display.deleteLater()
+        super().destroy()
+
+    def redraw(self, manager):
+        super().redraw(manager)
+        assert manager.world.dimension >= 2, "Too few dimensions in the world"
+        world_grid = manager.world.all()
+
+        # axis indices
+        ax0, ax1, ax2 = manager.world.axes_index(0, 1, 2)
+        xy_plane = Project2D(ax0, ax1)
+        if manager.world.dimension >= 3:
+            yz_plane = Project2D(ax1, ax2)
+            xz_plane = Project2D(ax0, ax2)
+        else:
+            yz_plane = Project2D(ax1, ax1)
+            xz_plane = Project2D(ax0, ax0)
+
+        self.xy_display.set_world(xy_plane.projection(world_grid))
+        self.yz_display.set_world(yz_plane.projection(world_grid))
+        self.xz_display.set_world(xz_plane.projection(world_grid))
+        self.xy_display.redraw()
+        self.yz_display.redraw()
+        self.xz_display.redraw()
 
 
 class Grid2DDisplay(QWidget):
@@ -445,6 +499,7 @@ class Grid2DDisplay(QWidget):
 
     def _draw_world(self, painter):
         """Draw the world contents."""
+        logger.debug("current world: %s", self.current_world)
         for (x, y), val in np.ndenumerate(self.current_world):
             if val == Material.WALL:
                 painter.fillRect(QRect(x, y, 1, 1), self.wall_brush)
@@ -543,8 +598,11 @@ class GridView(QWidget):
         if self.view_manager is None or self.view_manager.vtype != vtype:
             if self.view_manager:
                 self.view_manager.destroy()
+                self.view_manager = None
             if vtype == ViewType.GRID_2D:
                 self.view_manager = Grid2DViewBuilder(self)
+            elif vtype == ViewType.MULTIGRID_3D:
+                self.view_manager = Grid3DOrthogonalViewBuilder(self)
 
     @pyqtSlot(WorldManager)
     def model_changed(self, manager):

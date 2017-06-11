@@ -7,7 +7,7 @@ import numpy as np
 
 from PyQt5.QtCore import (QObject, pyqtSignal, pyqtSlot)
 
-from pathfinder.world import Material, WorldModelND
+from grid_demo.world import Material, WorldModelND
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,13 @@ class QtWorldManager(WorldManager, QObject):
         :param pos: n-tuple holding the point coordinates
         """
         self.build(np.array(pos), np.array(pos))
+        self.model_changed.emit(self)
+
+    @pyqtSlot()
+    def broadcast_world(self):
+        """
+        PyQt slot that requests a broadcast of a world-changed event.
+        """
         self.model_changed.emit(self)
 
     def resize(self, new_shape):

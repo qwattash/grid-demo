@@ -50,7 +50,7 @@ function info(){
 info "Running lint."
 if ( which "pylint" > /dev/null )
 then
-	pylint --rcfile=hooks/pylintrc --output-format=text --disable=locally-disabled --reports=n pathfinder
+	pylint --rcfile=hooks/pylintrc --output-format=text --disable=locally-disabled --reports=n grid_demo
 	if [ $? -ne 0 ]
 	then
 		err "Lint reported some errors."

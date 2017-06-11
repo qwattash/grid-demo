@@ -47,6 +47,18 @@ class WorldModelND:
         else:
             self._grid = grid
 
+    def axes_index(self, *args):
+        """
+        Return the axis indices in the world grid for the given
+        coordinates.
+
+        :param coord_idx: coordinate indices for which the axis index is
+        returned. E.g. in a 3D world we have x = (x0, x1, x2), the coordinate
+        index for x0 is <0> so axes_index(0) will return the grid axis for
+        coordinate x0.
+        """
+        return self._dimension - 1 - np.array(args)
+
     @property
     def shape(self):
         """
@@ -97,7 +109,8 @@ class WorldModelND:
         if p is None:
             return None
         assert len(p) == self.dimension,\
-            "dimension do not match world %d: %d" % (self.dimension, len(p))
+            "dimension do not match world dim:%d, world:%d" % (
+                self.dimension, len(p))
         return np.array(p, dtype=int)
 
     def _check_rect_ordering(self, p, q):
@@ -132,6 +145,12 @@ class WorldModelND:
         :param material: the material to use
         """
         self.fill(p, p, material)
+
+    def all(self):
+        """
+        Return a view on the whole world.
+        """
+        return np.array(self._grid)
 
     def query(self, p, q=None):
         """
